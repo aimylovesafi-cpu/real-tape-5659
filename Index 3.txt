@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+ <meta name="apple-mobile-web-app-capable" content="yes">
+ <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+ <meta name="theme-color" content="#">
+ <title>Reel Tape Engine Auto-Convert</title>
+ <style>
+ * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+ body {
+ margin: 0;
+ padding: 15px;
+ font-family: -apple-system, sans-serif;
+ background: #;
+ color: #000;
+ }
+.container { max-width: 400px; margin: 0 auto; }
+ button {
+ padding: 10px 12px;
+ font-size: 14px;
+ cursor: pointer;
+ border: 1px solid #999;
+ border-radius: 5px;
+ background: #fff;
+ }
+ button:disabled { opacity: 0.4; }
+ button.active { background: #; color: #fff; border-color: #; }
+ input[type="range"] { width: 100%; }
+ input[type="file"] { margin: 5px 0; width: 100%; }
+.box {
+ padding: 12px;
+ border: 1px solid #ccc;
+ border-radius: 8px;
+ margin-bottom: 12px;
+ background: #fff;
+ }
+.flex { display: flex; gap: 6px; }
+.flex > * { flex: 1; }
+ label { font-size: 12px; display: block; margin-bottom: 4px; font-weight: 600; }
+.counter { font-family: monospace; text-align: center; margin: 8px 0; font-size: 13px; }
+ #vuMeter { width: 100%; background: #000; display: block; margin: 10px 0; border-radius: 4px; }
+ details { margin-bottom: 12px; }
+ summary { cursor: pointer; padding: 10px; background: #; border-radius: 5px; font-weight: 600; }
+.row { margin-bottom: 12px; }
+.progress-bar {
+ width: 100%;
+ height: 6px;
+ background: #;
+ border-radius: 3px;
+ overflow: hidden;
+ margin-top: 8px;
+ display: none;
+ }
+.progress-fill {
+ height: 100%;
+ background: #;
+ width: 0%;
+ transition: width 0.2s;
+ }
+.status { font-size: 11px; color: #666; margin-top: 5px; min-height: 15px; }
+.info-box {
+ background: #;
+ border: 1px solid #;
+ padding: 10px;
+ border-radius: 5px;
+ font-size: 11px;
+ margin-bottom: 12px;
+ color: #;
+ }
+ </style>
+</head>
+<body>
+ <div class="container">
+ <h3 style="text-align:center;margin:0 0 15px 0;">Reel Tape Engine Pro</h3>
+
+ <div class="info-box" id="platformInfo">
+ 🔍 Detecting platform...
+ </div>
+
+ <!-- File Load -->
+ <div class="box">
+ <input type="file" id="fileInput" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.aiff">
+ <div id="fileName" style="font-size:11px;margin-top:5px;color:#666;">No file loaded</div>
+ <div class="progress-bar" id="convertProgress">
+ <div class="progress-fill" id="convertProgressFill"></div>
+ </div>
+ <div class="status" id="convertStatus"></div>
+ </div>
+
+ <!-- Transport -->
+ <div class="box">
+ <div class="flex" style="margin-bottom:10px;">
+ <button id="rewind">⏪</button>
+ <button id="stop">⏹</button>
+ <button id="play" disabled>▶</button>
+ <button id="pause" disabled>⏸</button>
+ <button id="forward">⏩</button>
+ </div>
+ <div class="counter">
+ <span id="currentTime">00:00</span> / <span id="totalTime">00:00</span>
+ </div>
+ </div>
+
+ <!-- Main Volume + FX -->
+ <div class="box">
+ <label>Main Volume</label>
+ <input type="range" id="volumeKnob" min="0" max="1" step="0.01" value="0.8">
+ <button id="mainFxToggle" class="active" style="margin-top:8px;width:100%;">FX: ON</button>
+ </div>
+
+ <!-- Loop Volume + FX -->
+ <div class="box">
+ <label>Loop Volume</label>
+ <input type="range" id="loopVolumeKnob" min="0" max="1" step="0.01" value="0.6">
+ <button id="loopFxToggle" class="active" style="margin-top:8px;width:100%;">FX: ON</button>
+ <div class="counter" style="font-size:12px;margin-top:8px;">
+ Loop: <span id="loopCounter">0000</span>
+ </div>
+ </div>
+
+ <!-- Loop Controls -->
+ <div class="box">
+ <div class="flex" style="margin-bottom:8px;">
+ <button id="setA">Set A</button>
+ <button id="setB">Set B</button>
+ <button id="loopToggle">Loop</button>
+ </div>
+ <div id="loopTime" style="font-size:11px;text-align:center;color:#666;">A: 00:00 B: 00:00</div>
+ </div>
+
+ <!-- Speed -->
+ <div class="box">
+ <label>Speed: <span id="speedVal">1.0</span>x</label>
+ <input type="range" id="speedKnob" min="0.25" max="2" step="0.05" value="1">
+ </div>
+
+ <!-- Export -->
+ <div class="box">
+ <button id="exportMix" disabled style="width:100%;background:#;color:#fff;border-color:#;font-weight:600;">
+ 💾 Export Mix
+ </button>
+ <div class="progress-bar" id="exportProgress">
+ <div class="progress-fill" id="exportProgressFill"></div>
+ </div>
+ <div class="status" id="exportStatus"></div>
+ </div>
+
+ <!-- Main FX -->
+ <details>
+ <summary>MAIN FX</summary>
+ <div style="padding:12px;">
+ <div class="row"><label>Pitch <span id="pitchVal">0</span></label><input type="range" id="pitch" min="-12" max="12" step="1" value="0"></div>
+ <div class="row"><label>Bass <span id="bassVal">0</span></label><input type="range" id="bass" min="-12" max="12" step="1" value="0"></div>
+ <div class="row"><label>Mid <span id="midVal">0</span></label><input type="range" id="mid" min="-12" max="12" step="1" value="0"></div>
+ <div class="row"><label>Treble <span id="trebleVal">0</span></label><input type="range" id="treble" min="-12" max="12" step="1" value="0"></div>
+ <div class="row"><label>Delay <span id="delayVal">0</span></label><input type="range" id="delay" min="0" max="0.8" step="0.01" value="0"></div>
+ <div class="row"><label>Reverb <span id="reverbVal">0</span></label><input type="range" id="reverb" min="0" max="0.8" step="0.01" value="0"></div>
+ <div class="row"><label>Balance <span id="balanceVal">C</span></label><input type="range" id="balance" min="-1" max="1" step="0.01" value="0"></div>
+ </div>
+ </details>
+
+ <!-- Loop FX -->
+ <details>
+ <summary>LOOP FX</summary>
+ <div style="padding:12px;">
+ <div class="row"><label>Pitch <span id="loopPitchVal">0</span></label><input type="range" id="loopPitch" min="-12" max="12" step="1" value="0"></div>
+ <div class="row"><label>Bass <span id="loopBassVal">0</span></label><input type="range" id="loopBass" min="-12" max="12" step="1" value="0"></div>
+ <div class="row"><label>Mid <span id="loopMidVal">0</span></label><input type="range" id="loopMid" min="-12" max="12" step="1" value="0"></div>
+ <div class="row"><label>Treble <span id="loopTrebleVal">0</span></label><input type="range" id="loopTreble" min="-12" max="12" step="1" value="0"></div>
+ <div class="row"><label>Delay <span id="loopDelayVal">0</span></label><input type="range" id="loopDelay" min="0" max="0.8" step="0.01" value="0"></div>
+ <div class="row"><label>Reverb <span id="loopReverbVal">0</span></label><input type="range" id="loopReverb" min="0" max="0.8" step="0.01" value="0"></div>
+ <div class="row"><label>Balance <span id="loopBalanceVal">C</span></label><input type="range" id="loopBalance" min="-1" max="1" step="0.01" value="0"></div>
+ </div>
+ </details>
+
+ <!-- VU Meter -->
+ <canvas id="vuMeter" width="300" height="60"></canvas>
+
+ <!-- Power -->
+ <button id="powerBtn" class="active" style="width:100%;margin-bottom:15px;">⏻ Power: ON</button>
+
+ <!-- Hidden -->
+ <div style="display:none;">
+ <span id="counter">0000</span>
+ <button id="record">●</button>
+ <button id="reverse">REV</button>
+ <button id="fxToggle">EFFECTS</button>
+ <div id="fxPanel"></div>
+ </div>
+ </div>
+
+ <script>
+ const $ = id => document.getElementById(id);
+ const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+ const isAndroid = /Android/.test(navigator.userAgent);
+ const targetFormat = isIOS? 'AIFF': 'WAV';
+ const targetExt = isIOS? '.aiff': '.wav';
+
+ $('platformInfo').textContent = `📱 Platform: ${isIOS? 'iOS': isAndroid? 'Android': 'Desktop'} → Auto-convert to ${targetFormat}`;
+
+ class DualTapeEngine {
+ constructor() {
+ this.ctx = null;
+ this.mainSource = null;
+ this.mainBuffer = null;
+ this.mainPlaying = false;
+ this.mainStartTime = 0;
+ this.mainPauseTime = 0;
+ this.mainGain = null;
+ this.mainFxChain = null;
+ this.mainFxEnabled = true;
+
+ this.loopSource = null;
+ this.loopBuffer = null;
+ this.loopPlaying = false;
+ this.loopStartTime = 0;
+ this.loopGain = null;
+ this.loopFxChain = null;
+ this.loopFxEnabled = true;
+
+ this.loopA = 0;
+ this.loopB = 0;
+ this.loopCounter = 0;
+ this.powerOn = true;
+ this.exporting = false;
+ this.init();
+ }
+
+ async init() {
+ this.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback', sampleRate: 44100 });
+ await this.setupAudioGraphs();
+ this.setupUI();
+ this.animate();
+ this.updateCounters();
+ }
+
+ createFxChain() {
+ const chain = {};
+ chain.pitch = this.ctx.createGain();
+ chain.pitch.gain.value = 1.0;
+ chain.bassEQ = this.ctx.createBiquadFilter();
+ chain.bassEQ.type = 'lowshelf';
+ chain.bassEQ.frequency.value = 200;
+ chain.midEQ = this.ctx.createBiquadFilter();
+ chain.midEQ.type = 'peaking';
+ chain.midEQ.frequency.value = 1000;
+ chain.midEQ.Q.value = 1;
+ chain.trebleEQ = this.ctx.createBiquadFilter();
+ chain.trebleEQ.type = 'highshelf';
+ chain.trebleEQ.frequency.value = 3000;
+ chain.panner = this.ctx.createStereoPanner();
+ chain.delay = this.ctx.createDelay(1.0);
+ chain.delayFeedback = this.ctx.createGain();
+ chain.delayFeedback.gain.value = 0.3;
+ chain.delayGain = this.ctx.createGain();
+ chain.delayGain.gain.value = 0;
+ chain.reverb = this.ctx.createConvolver();
+ chain.reverbGain = this.ctx.createGain();
+ chain.reverbGain.gain.value = 0;
+
+ chain.pitch.connect(chain.bassEQ);
+ chain.bassEQ.connect(chain.midEQ);
+ chain.midEQ.connect(chain.trebleEQ);
+ chain.trebleEQ.connect(chain.panner);
+ chain.trebleEQ.connect(chain.delay);
+ chain.delay.connect(chain.delayFeedback);
+ chain.delayFeedback.connect(chain.delay);
+ chain.delay.connect(chain.delayGain);
+ chain.trebleEQ.connect(chain.reverb);
+ chain.reverb.connect(chain.reverbGain);
+ return chain;
+ }
+
+ async setupAudioGraphs() {
+ const rate = this.ctx.sampleRate;
+ const length = rate * 2;
+ const impulse = this.ctx.createBuffer(2, length, rate);
+ for (let ch = 0; ch < 2; ch++) {
+ const data = impulse.getChannelData(ch);
+ for (let i = 0; i < length; i++) {
+ data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2);
+ }
+ }
+
+ this.mainGain = this.ctx.createGain();
+ this.mainGain.gain.value = 0.8;
+ this.mainFxChain = this.createFxChain();
+ this.mainFxChain.reverb.buffer = impulse;
+ this.mainFxBypass = this.ctx.createGain();
+
+ this.loopGain = this.ctx.createGain();
+ this.loopGain.gain.value = 0.6;
+ this.loopFxChain = this.createFxChain();
+ this.loopFxChain.reverb.buffer = impulse;
+ this.loopFxBypass = this.ctx.createGain();
+
+ this.masterGain = this.ctx.createGain();
+ this.masterGain.gain.value = 1.0;
+ this.mainAnalyser = this.ctx.createAnalyser();
+ this.mainAnalyser.fftSize = 512;
+
+ this.mainGain.connect(this.mainFxChain.pitch);
+ this.mainFxChain.panner.connect(this.mainFxBypass);
+ this.mainFxChain.delayGain.connect(this.masterGain);
+ this.mainFxChain.reverbGain.connect(this.masterGain);
+ this.mainFxBypass.connect(this.masterGain);
+
+ this.loopGain.connect(this.loopFxChain.pitch);
+ this.loopFxChain.panner.connect(this.loopFxBypass);
+ this.loopFxChain.delayGain.connect(this.masterGain);
+ this.loopFxChain.reverbGain.connect(this.masterGain);
+ this.loopFxBypass.connect(this.masterGain);
+
+ this.masterGain.connect(this.mainAnalyser);
+ this.masterGain.connect(this.ctx.destination);
+ }
+
+ setupUI() {
+ $('fileInput').onchange = e => this.handleFileLoad(e.target.files[0]);
+ $('play').onclick = () => this.playMain();
+ $('pause').onclick = () => this.pauseMain();
+ $('stop').onclick = () => this.stopAll();
+ $('rewind').onclick = () => this.seekMain(-5);
+ $('forward').onclick = () => this.seekMain(5);
+
+ $('setA').onclick = () => { this.loopA = this.getMainTime(); this.updateLoopDisplay(); };
+ $('setB').onclick = () => { this.loopB = this.getMainTime(); this.updateLoopDisplay(); this.createLoopBuffer(); };
+ $('loopToggle').onclick = () => this.toggleLoop();
+
+ $('volumeKnob').oninput = e => { this.mainGain.gain.value = parseFloat(e.target.value); };
+ $('loopVolumeKnob').oninput = e => { this.loopGain.gain.value = parseFloat(e.target.value); };
+
+ $('mainFxToggle').onclick = () => {
+ this.mainFxEnabled =!this.mainFxEnabled;
+ this.updateFxRouting();
+ $('mainFxToggle').textContent = this.mainFxEnabled? 'FX: ON': 'FX: OFF';
+ $('mainFxToggle').classList.toggle('active', this.mainFxEnabled);
+ };
+ $('loopFxToggle').onclick = () => {
+ this.loopFxEnabled =!this.loopFxEnabled;
+ this.updateFxRouting();
+ $('loopFxToggle').textContent = this.loopFxEnabled? 'FX: ON': 'FX: OFF';
+ $('loopFxToggle').classList.toggle('active', this.loopFxEnabled);
+ };
+
+ $('exportMix').onclick = () => this.exportMix();
+
+ const bindFx = (id, chain, param, subparam, display) => {
+ $(id).oninput = e => {
+ const val = parseFloat(e.target.value);
+ if (subparam) chain[param][subparam].value = val;
+ else chain[param].value = val;
+ if (display) {
+ if (id.includes('balance')) {
+ $(display).textContent = Math.abs(val) < 0.05? 'C': val < 0? `L${Math.abs(val*100).toFixed(0)}`: `R${(val*100).toFixed(0)}`;
+ } else if (id.includes('delay') || id.includes('reverb')) {
+ $(display).textContent = (val * 100).toFixed(0);
+ } else {
+ $(display).textContent = val.toFixed(0);
+ }
+ }
+ };
+ };
+
+ bindFx('pitch', this.mainFxChain, 'pitch', 'gain', 'pitchVal');
+ bindFx('bass', this.mainFxChain, 'bassEQ', 'gain', 'bassVal');
+ bindFx('mid', this.mainFxChain, 'midEQ', 'gain', 'midVal');
+ bindFx('treble', this.mainFxChain, 'trebleEQ', 'gain', 'trebleVal');
+ bindFx('delay', this.mainFxChain, 'delayGain', 'gain', 'delayVal');
+ bindFx('reverb', this.mainFxChain, 'reverbGain', 'gain', 'reverbVal');
+ bindFx('balance', this.mainFxChain, 'panner', 'pan', 'balanceVal');
+
+ bindFx('loopPitch', this.loopFxChain, 'pitch', 'gain', 'loopPitchVal');
+ bindFx('loopBass', this.loopFxChain, 'bassEQ', 'gain', 'loopBassVal');
+ bindFx('loopMid', this.loopFxChain, 'midEQ', 'gain', 'loopMidVal');
+ bindFx('loopTreble', this.loopFxChain, 'trebleEQ', 'gain', 'loopTrebleVal');
+ bindFx('loopDelay', this.loopFxChain, 'delayGain', 'gain', 'loopDelayVal');
+ bindFx('loopReverb', this.loopFxChain, 'reverbGain', 'gain', 'loopReverbVal');
+ bindFx('loopBalance', this.loopFxChain, 'panner', 'pan', 'loopBalanceVal');
+
+ $('speedKnob').oninput = e => {
+ const speed = parseFloat(e.target.value);
+ if (this.mainSource) this.mainSource.playbackRate.value = speed;
+ $('speedVal').textContent = speed.toFixed(1);
+ };
+
+ $('powerBtn').onclick = () => this.togglePower();
+
+ document.addEventListener('keydown', e => {
+ if (e.target.tagName === 'INPUT') return;
+ if (e.code === 'Space') { e.preventDefault(); this.mainPlaying? this.pauseMain(): this.playMain(); }
+ });
+ }
+
+ updateFxRouting() {
+ if (this.mainFxEnabled) {
+ this.mainFxChain.panner.connect(this.mainFxBypass);
+ } else {
+ this.mainGain.connect(this.mainFxBypass);
+ }
+ if (this.loopFxEnabled) {
+ this.loopFxChain.panner.connect(this.loopFxBypass);
+ } else {
+ this.loopGain.connect(this.loopFxBypass);
+ }
+ }
+
+ async handleFileLoad(file) {
+ if (!file) return;
+ const ext = file.name.split('.').pop().toLowerCase();
+ const needsConvert =!['wav', 'aiff', 'aif'].includes(ext);
+
+ if (needsConvert) {
+ await this.autoConvertAndLoad(file);
+ } else {
+ await this.loadFile(file);
+ }
+ }
+
+ async autoConvertAndLoad(file) {
+ $('fileName').textContent = `Converting ${file.name} to ${targetFormat}...`;
+ $('convertProgress').style.display = 'block';
+ $('convertStatus').textContent = 'Reading file...';
+ $('convertProgressFill').style.width = '10%';
+
+ try {
+ if (this.ctx.state === 'suspended') await this.ctx.resume();
+
+ $('convertStatus').textContent = 'Decoding audio...';
+ $('convertProgressFill').style.width = '30%';
+ const arrayBuffer = await file.arrayBuffer();
+ const decodedBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+
+ $('convertStatus').textContent = `Encoding ${targetFormat}...`;
+ $('convertProgressFill').style.width = '60%';
+
+ let blob;
+ if (isIOS) {
+ blob = this.bufferToAiff(decodedBuffer);
+ } else {
+ blob = this.bufferToWav(decodedBuffer);
+ }
+
+ $('convertProgressFill').style.width = '90%';
+ const newFileName = file.name.replace(/\.[^/.]+$/, targetExt);
+ const convertedFile = new File([blob], newFileName, { type: isIOS? 'audio/aiff': 'audio/wav' });
+
+ $('convertStatus').textContent = 'Loading...';
+ $('convertProgressFill').style.width = '100%';
+ await this.loadFile(convertedFile);
+
+ $('convertStatus').textContent = `✓ Converted to ${targetFormat}`;
+ setTimeout(() => {
+ $('convertProgress').style.display = 'none';
+ $('convertProgressFill').style.width = '0%';
+ $('convertStatus').textContent = '';
+ }, 2000);
+ } catch (err) {
+ console.error('Convert error:', err);
+ $('convertStatus').textContent = 'Error: ' + err.message;
+ $('convertProgress').style.display = 'none';
+ }
+ }
+
+ async loadFile(file) {
+ this.stopAll();
+ try {
+ if (this.ctx.state === 'suspended') await this.ctx.resume();
+ const arrayBuffer = await file.arrayBuffer();
+ this.mainBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+ $('fileName').textContent = file.name.substring(0, 40);
+ $('play').disabled = false;
+ $('exportMix').disabled = false;
+ this.updateTotalTime();
+ this.mainPauseTime = 0;
+ this.loopA = 0;
+ this.loopB = this.mainBuffer.duration;
+ this.updateLoopDisplay();
+ } catch (err) {
+ console.error('Load error:', err);
+ $('fileName').textContent = 'Error: Format not supported';
+ }
+ }
+
+ createMainSource() {
+ if (this.mainSource) { this.mainSource.stop(); this.mainSource.disconnect(); }
+ this.mainSource = this.ctx.createBufferSource();
+ this.mainSource.buffer = this.mainBuffer;
+ const speed = parseFloat($('speedKnob').value || 1);
+ this.mainSource.playbackRate.value = speed;
+ this.mainSource.connect(this.mainGain);
+ this.mainSource.onended = () => { if (this.mainPlaying) this.stopMain(); };
+ }
+
+ createLoopBuffer() {
+ if (!this.mainBuffer || this.loopB <= this.loopA) return;
+ const rate = this.mainBuffer.sampleRate;
+ const startSample = Math.floor(this.loopA * rate);
+ const endSample = Math.floor(this.loopB * rate);
+ const length = endSample - startSample;
+ this.loopBuffer = this.ctx.createBuffer(this.mainBuffer.numberOfChannels, length, rate);
+ for (let ch = 0; ch < this.mainBuffer.numberOfChannels; ch++) {
+ const mainData = this.mainBuffer.getChannelData(ch);
+ const loopData = this.loopBuffer.getChannelData(ch);
+ for (let i = 0; i < length; i++) loopData[i] = mainData[startSample + i];
+ }
+ }
+
+ createLoopSource() {
+ if (this.loopSource) { this.loopSource.stop(); this.loopSource.disconnect(); }
+ if (!this.loopBuffer) return;
+ this.loopSource = this.ctx.createBufferSource();
+ this.loopSource.buffer = this.loopBuffer;
+ this.loopSource.loop = true;
+ this.loopSource.connect(this.loopGain);
+ }
+
+ playMain() {
+ if (!this.powerOn ||!this.mainBuffer) return;
+ if (this.ctx.state === 'suspended') this.ctx.resume();
+ this.createMainSource();
+ let offset = this.mainPauseTime % this.mainBuffer.duration;
+ this.mainSource.start(0, offset);
+ this.mainStartTime = this.ctx.currentTime - offset;
+ this.mainPlaying = true;
+ $('play').disabled = true;
+ $('pause').disabled = false;
+ }
+
+ pauseMain() {
+ if (!this.mainSource ||!this.mainPlaying) return;
+ this.mainSource.stop();
+ this.mainPauseTime = this.getMainTime();
+ this.mainPlaying = false;
+ $('play').disabled = false;
+ $('pause').disabled = true;
+ }
+
+ stopMain() {
+ if (this.mainSource) this.mainSource.stop();
+ this.mainPlaying = false;
+ this.mainPauseTime = 0;
+ this.mainStartTime = 0;
+ $('play').disabled = false;
+ $('pause').disabled = true;
+ }
+
+ stopAll() {
+ this.stopMain();
+ this.stopLoop();
+ }
+
+ toggleLoop() {
+ if (this.loopPlaying) this.stopLoop();
+ else this.playLoop();
+ }
+
+ playLoop() {
+ if (!this.powerOn ||!this.loopBuffer) { alert('Set A and B points first'); return; }
+ if (this.ctx.state === 'suspended') this.ctx.resume();
+ this.createLoopSource();
+ this.loopSource.start(0);
+ this.loopStartTime = this.ctx.currentTime;
+ this.loopPlaying = true;
+ this.loopCounter = 0;
+ $('loopToggle').classList.add('active');
+ }
+
+ stopLoop() {
+ if (this.loopSource) this.loopSource.stop();
+ this.loopPlaying = false;
+ $('loopToggle').classList.remove('active');
+ }
+
+ seekMain(seconds) {
+ if (!this.mainBuffer) return;
+ const wasPlaying = this.mainPlaying;
+ if (wasPlaying) this.pauseMain();
+ this.mainPauseTime = Math.max(0, Math.min(this.mainBuffer.duration, this.mainPauseTime + seconds));
+ if (wasPlaying) this.playMain();
+ }
+
+ togglePower() {
+ this.powerOn =!this.powerOn;
+ $('powerBtn').classList.toggle('active', this.powerOn);
+ $('powerBtn').textContent = this.powerOn? '⏻ Power: ON': '⏻ Power: OFF';
+ if (!this.powerOn) { this.stopAll(); this.ctx.suspend(); }
+ else { this.ctx.resume(); }
+ }
+
+ getMainTime() {
+ if (!this.mainBuffer) return 0;
+ if (!this.mainPlaying) return this.mainPauseTime;
+ return Math.min(this.ctx.currentTime - this.mainStartTime, this.mainBuffer.duration);
+ }
+
+ updateTotalTime() {
+ if (this.mainBuffer) $('totalTime').textContent = this.formatTime(this.mainBuffer.duration);
+ }
+
+ updateLoopDisplay() {
+ $('loopTime').textContent = `A: ${this.formatTime(this.loopA)} B: ${this.formatTime(this.loopB)}`;
+ }
+
+ updateCounters() {
+ setInterval(() => {
+ if (this.mainPlaying) $('currentTime').textContent = this.formatTime(this.getMainTime());
+ if (this.loopPlaying) {
+ const loopElapsed = this.ctx.currentTime - this.loopStartTime;
+ const loopLen = this.loopB - this.loopA;
+ this.loopCounter = Math.floor(loopElapsed / loopLen);
+ $('loopCounter').textContent = this.loopCounter.toString().padStart(4, '0');
+ }
+ }, 100);
+ }
+
+ formatTime(sec) {
+ sec = Math.max(0, sec);
+ const m = Math.floor(sec / 60);
+ const s = Math.floor(sec % 60);
+ return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+ }
+
+ animate() {
+ const canvas = $('vuMeter');
+ const vctx = canvas.getContext('2d');
+ const dataArray = new Uint8Array(this.mainAnalyser.frequencyBinCount);
+ const draw = () => {
+ requestAnimationFrame(draw);
+ this.mainAnalyser.getByteFrequencyData(dataArray);
+ const avg = dataArray.reduce((a, b) => a + b) / dataArray.length;
+ const level = avg / 255;
+ vctx.fillStyle = '#000';
+ vctx.fillRect(0, 0, 300, 60);
+ const barWidth = 4;
+ const gap = 2;
+ const bars = Math.floor(300 / (barWidth + gap));
+ const activeBars = Math.floor(bars * level);
+ for (let i = 0; i < bars; i++) {
+ const x = i * (barWidth + gap);
+ const height = i < activeBars? 40 + Math.sin(i * 0.5) * 10: 5;
+ const y = 30 - height / 2;
+ if (i < bars * 0.6) vctx.fillStyle = '#';
+ else if (i < bars * 0.8) vctx.fillStyle = '#';
+ else vctx.fillStyle = '#';
+ vctx.fillRect(x, y, barWidth, height);
+ }
+ };
+ draw();
+ }
+
+ async exportMix() {
+ if (!this.mainBuffer || this.exporting) return;
+ this.exporting = true;
+ $('exportMix').disabled = true;
+ $('exportProgress').style.display = 'block';
+ $('exportStatus').textContent = 'Rendering mix...';
+ $('exportProgressFill').style.width = '20%';
+
+ try {
+ const duration = this.mainBuffer.duration;
+ const sampleRate = this.mainBuffer.sampleRate;
+ const offlineCtx = new OfflineAudioContext(2, sampleRate * duration, sampleRate);
+
+ const mainGain = offlineCtx.createGain();
+ mainGain.gain.value = this.mainGain.gain.value;
+ const loopGain = offlineCtx.createGain();
+ loopGain.gain.value = this.loopGain.gain.value;
+
+ const mainFxChain = this.createOfflineFxChain(offlineCtx);
+ const loopFxChain = this.createOfflineFxChain(offlineCtx);
+ this.copyFxSettings(this.mainFxChain, mainFxChain);
+ this.copyFxSettings(this.loopFxChain, loopFxChain);
+
+ const masterGain = offlineCtx.createGain();
+ masterGain.gain.value = 1.0;
+
+ mainGain.connect(mainFxChain.pitch);
+ mainFxChain.panner.connect(masterGain);
+ mainFxChain.delayGain.connect(masterGain);
+ mainFxChain.reverbGain.connect(masterGain);
+
+ loopGain.connect(loopFxChain.pitch);
+ loopFxChain.panner.connect(masterGain);
+ loopFxChain.delayGain.connect(masterGain);
+ loopFxChain.reverbGain.connect(masterGain);
+
+ masterGain.connect(offlineCtx.destination);
+
+ const mainSrc = offlineCtx.createBufferSource();
+ mainSrc.buffer = this.mainBuffer;
+ mainSrc.playbackRate.value = parseFloat($('speedKnob').value || 1);
+ mainSrc.connect(mainGain);
+ mainSrc.start(0);
+
+ if (this.loopBuffer) {
+ const loopSrc = offlineCtx.createBufferSource();
+ loopSrc.buffer = this.loopBuffer;
+ loopSrc.loop = true;
+ loopSrc.connect(loopGain);
+ loopSrc.start(0);
+ }
+
+ $('exportStatus').textContent = 'Processing audio...';
+ $('exportProgressFill').style.width = '50%';
+ const renderedBuffer = await offlineCtx.startRendering();
+
+ $('exportStatus').textContent = `Encoding ${targetFormat}...`;
+ $('exportProgressFill').style.width = '80%';
+ const blob = isIOS? this.bufferToAiff(renderedBuffer): this.bufferToWav(renderedBuffer);
+
+ const url = URL.createObjectURL(blob);
+ const a = document.createElement('a');
+ a.href = url;
+ a.download = `mix-${Date.now()}${targetExt}`;
+ a.click();
+ URL.revokeObjectURL(url);
+
+ $('exportStatus').textContent = 'Done! Check downloads.';
+ $('exportProgressFill').style.width = '100%';
+ } catch (err) {
+ console.error('Export error:', err);
+ $('exportStatus').textContent = 'Error: ' + err.message;
+ } finally {
+ this.exporting = false;
+ $('exportMix').disabled = false;
+ setTimeout(() => {
+ $('exportProgress').style.display = 'none';
+ $('exportProgressFill').style.width = '0%';
+ $('exportStatus').textContent = '';
+ }, 3000);
+ }
+ }
+
+ createOfflineFxChain(ctx) {
+ const chain = {};
+ chain.pitch = ctx.createGain();
+ chain.pitch.gain.value = 1.0;
+ chain.bassEQ = ctx.createBiquadFilter();
+ chain.bassEQ.type = 'lowshelf';
+ chain.bassEQ.frequency.value = 200;
+ chain.midEQ = ctx.createBiquadFilter();
+ chain.midEQ.type = 'peaking';
+ chain.midEQ.frequency.value = 1000;
+ chain.midEQ.Q.value = 1;
+ chain.trebleEQ = ctx.createBiquadFilter();
+ chain.trebleEQ.type = 'highshelf';
+ chain.trebleEQ.frequency.value = 3000;
+ chain.panner = ctx.createStereoPanner();
+ chain.delay = ctx.createDelay(1.0);
+ chain.delayFeedback = ctx.createGain();
+ chain.delayFeedback.gain.value = 0.3;
+ chain.delayGain = ctx.createGain();
+ chain.delayGain.gain.value = 0;
+ chain.reverb = ctx.createConvolver();
+ chain.reverbGain = ctx.createGain();
+ chain.reverbGain.gain.value = 0;
+
+ chain.pitch.connect(chain.bassEQ);
+ chain.bassEQ.connect(chain.midEQ);
+ chain.midEQ.connect(chain.trebleEQ);
+chain.trebleEQ.frequency.value = 3000;
+ chain.panner = ctx.createStereoPanner();
+ chain.delay = ctx.createDelay(1.0);
+ chain.delayFeedback = ctx.createGain();
+ chain.delayFeedback.gain.value = 0.3;
+ chain.delayGain = ctx.createGain();
+ chain.delayGain.gain.value = 0;
+ chain.reverb = ctx.createConvolver();
+ chain.reverbGain = ctx.createGain();
+ chain.reverbGain.gain.value = 0;
+
+ chain.pitch.connect(chain.bassEQ);
+ chain.bassEQ.connect(chain.midEQ);
+ chain.midEQ.connect(chain.trebleEQ);
+ chain.trebleEQ.connect(chain.panner);
+ chain.trebleEQ.connect(chain.delay);
+ chain.delay.connect(chain.delayFeedback);
+ chain.delayFeedback.connect(chain.delay);
+ chain.delay.connect(chain.delayGain);
+ chain.trebleEQ.connect(chain.reverb);
+ chain.reverb.connect(chain.reverbGain);
+ return chain;
+ }
+
+ copyFxSettings(src, dst) {
+ dst.bassEQ.gain.value = src.bassEQ.gain.value;
+ dst.midEQ.gain.value = src.midEQ.gain.value;
+ dst.trebleEQ.gain.value = src.trebleEQ.gain.value;
+ dst.panner.pan.value = src.panner.pan.value;
+ dst.delayGain.gain.value = src.delayGain.gain.value;
+ dst.reverbGain.gain.value = src.reverbGain.gain.value;
+ dst.reverb.buffer = src.reverb.buffer;
+ }
+
+ bufferToWav(buffer) {
+ const numChannels = buffer.numberOfChannels;
+ const sampleRate = buffer.sampleRate;
+ const format = 1; // PCM
+ const bitDepth = 16;
+ const bytesPerSample = bitDepth / 8;
+ const blockAlign = numChannels * bytesPerSample;
+ const byteRate = sampleRate * blockAlign;
+ const dataSize = buffer.length * blockAlign;
+ const bufferSize = 44 + dataSize;
+ const arrayBuffer = new ArrayBuffer(bufferSize);
+ const view = new DataView(arrayBuffer);
+
+ const writeString = (offset, string) => {
+ for (let i = 0; i < string.length; i++) {
+ view.setUint8(offset + i, string.charCodeAt(i));
+ }
+ };
+
+ writeString(0, 'RIFF');
+ view.setUint32(4, 36 + dataSize, true);
+ writeString(8, 'WAVE');
+ writeString(12, 'fmt ');
+ view.setUint32(16, 16, true);
+ view.setUint16(20, format, true);
+ view.setUint16(22, numChannels, true);
+ view.setUint32(24, sampleRate, true);
+ view.setUint32(28, byteRate, true);
+ view.setUint16(32, blockAlign, true);
+ view.setUint16(34, bitDepth, true);
+ writeString(36, 'data');
+ view.setUint32(40, dataSize, true);
+
+ let offset = 44;
+ for (let i = 0; i < buffer.length; i++) {
+ for (let ch = 0; ch < numChannels; ch++) {
+ const sample = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+ view.setInt16(offset, sample < 0? sample * 0x8000: sample * 0x7FFF, true);
+ offset += 2;
+ }
+ }
+
+ return new Blob([arrayBuffer], { type: 'audio/wav' });
+ }
+
+ bufferToAiff(buffer) {
+ const numChannels = buffer.numberOfChannels;
+ const sampleRate = buffer.sampleRate;
+ const bitDepth = 16;
+ const bytesPerSample = bitDepth / 8;
+ const dataSize = buffer.length * numChannels * bytesPerSample;
+ const bufferSize = 54 + dataSize;
+ const arrayBuffer = new ArrayBuffer(bufferSize);
+ const view = new DataView(arrayBuffer);
+
+ const writeString = (offset, string) => {
+ for (let i = 0; i < string.length; i++) {
+ view.setUint8(offset + i, string.charCodeAt(i));
+ }
+ };
+
+ const writeUint32 = (offset, value) => {
+ view.setUint32(offset, value, false);
+ };
+
+ const writeUint16 = (offset, value) => {
+ view.setUint16(offset, value, false);
+ };
+
+ // IEEE 80-bit extended float for sample rate
+ const writeSampleRate = (offset, rate) => {
+ const exponent = Math.floor(Math.log2(rate)) + 16383;
+ const mantissa = Math.floor((rate / Math.pow(2, Math.floor(Math.log2(rate)))) * Math.pow(2, 63));
+ view.setUint16(offset, exponent, false);
+ view.setUint32(offset + 2, mantissa >> 32, false);
+ view.setUint32(offset + 6, mantissa & 0xFFFFFFFF, false);
+ };
+
+ writeString(0, 'FORM');
+ writeUint32(4, bufferSize - 8);
+ writeString(8, 'AIFF');
+ writeString(12, 'COMM');
+ writeUint32(16, 18);
+ writeUint16(20, numChannels);
+ writeUint32(22, buffer.length);
+ writeUint16(26, bitDepth);
+ writeSampleRate(28, sampleRate);
+ writeString(38, 'SSND');
+ writeUint32(42, dataSize + 8);
+ writeUint32(46, 0);
+ writeUint32(50, 0);
+
+ let offset = 54;
+ for (let i = 0; i < buffer.length; i++) {
+ for (let ch = 0; ch < numChannels; ch++) {
+ const sample = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+ view.setInt16(offset, sample < 0? sample * 0x8000: sample * 0x7FFF, false);
+ offset += 2;
+ }
+ }
+
+ return new Blob([arrayBuffer], { type: 'audio/aiff' });
+ }
+ }
+
+ window.addEventListener('load', () => {
+ window.tapeEngine = new DualTapeEngine();
+ });
+ </script>
+</body>
+</html>
